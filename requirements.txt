@@ -1,0 +1,15 @@
+sunpy
+astropy
+aiapy
+ndcube
+numpy
+pandas
+ipython
+ipykernel
+ipywidgets
+ipympl
+matplotlib
+scipy
+xrtpy
+h5netcdf
+sunkit-instruments

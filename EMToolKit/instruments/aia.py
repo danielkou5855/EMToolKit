@@ -54,24 +54,75 @@ AIA_TEMPERATURES = np.array([5.5 , 5.55, 5.6 , 5.65, 5.7 , 5.75, 5.8 , 5.85, 5.9
 					7.05, 7.1 , 7.15, 7.2 , 7.25, 7.3 , 7.35, 7.4 , 7.45, 7.5 ])
 
 
-# Load AIA data from a set of paths and return the appropriate
-# arguments for use in an EMToolKit DataSequence -- a list
-# of SunPy maps, corresponding errors, the log temperature
-# axes for the temperature response functions and the temperature
-# response functions themselves:
-def load_from_paths(paths,xl=None,yl=None,dx=None,dy=None,refindex=0):
-	refmap = Map(paths[refindex])#.rotate(order=3)
-	refmap = Map(paths[refindex])#.rotate(order=3)
-	nocrop = (xl is None or yl is None or dx is None or dy is None)
-	if(nocrop == False):
-		blc=SkyCoord(xl,yl,frame=refmap.coordinate_frame)
-		trc=SkyCoord(xl+dx,yl+dy,frame=refmap.coordinate_frame)
+# # Load AIA data from a set of paths and return the appropriate
+# # arguments for use in an EMToolKit DataSequence -- a list
+# # of SunPy maps, corresponding errors, the log temperature
+# # axes for the temperature response functions and the temperature
+# # response functions themselves:
+# def load_from_paths(paths,xl=None,yl=None,dx=None,dy=None,refindex=0):
+# 	refmap = Map(paths[refindex])#.rotate(order=3)
+# 	refmap = Map(paths[refindex])#.rotate(order=3)
+# 	nocrop = (xl is None or yl is None or dx is None or dy is None)
+# 	if(nocrop == False):
+# 		blc=SkyCoord(xl,yl,frame=refmap.coordinate_frame)
+# 		trc=SkyCoord(xl+dx,yl+dy,frame=refmap.coordinate_frame)
 
-	maps=[]
-	for i in range(0,len(paths)):
-		maps.append(Map(paths[i]))#.rotate(order=3))
-		if(nocrop==False): maps[i] = maps[i].submap(blc,top_right=trc)
-	return maps
+# 	maps=[]
+# 	for i in range(0,len(paths)):
+# 		maps.append(Map(paths[i]))#.rotate(order=3))
+# 		if(nocrop==False): maps[i] = maps[i].submap(blc,top_right=trc)
+# 	return maps
+
+from aiapy.calibrate import register
+
+def load_from_paths(paths, xl=None, yl=None, dx=None, dy=None, refindex=0):
+    """
+    Loads AIA data from a set of file paths and returns the necessary arguments
+    for use in an EMToolKit DataSequence. This includes a list of SunPy maps,
+    corresponding errors, the logarithmic temperature axes for the temperature
+    response functions, and the temperature response functions themselves.
+
+    Args:
+        paths (list): List of file paths to AIA data.
+        xl (float, optional): X-coordinate of the lower left corner for cropping. Defaults to None.
+        yl (float, optional): Y-coordinate of the lower left corner for cropping. Defaults to None.
+        dx (float, optional): Width of the region to crop. Defaults to None.
+        dy (float, optional): Height of the region to crop. Defaults to None.
+        refindex (int, optional): Index of the reference map in the paths list. Defaults to 0.
+
+    Returns:
+        list: A list of SunPy maps after optional cropping.
+    """
+    refmap = Map(paths[refindex])
+    nocrop = (xl is None or yl is None or dx is None or dy is None)
+    if not nocrop:
+        blc = SkyCoord(xl, yl, frame=refmap.coordinate_frame)
+        trc = SkyCoord(xl + dx, yl + dy, frame=refmap.coordinate_frame)
+
+    maps = []
+	
+    # compare dem outputs
+    import pickle
+
+    with open("idl_output.pkl", "rb") as f:
+        idl = pickle.load(f)  # Load the single object
+
+    for i in range(len(paths)):
+        tmp_map = Map(paths[i])
+        tmp_map = register(tmp_map, order=1)
+        # divide tmp_map.data by the exposure time
+
+        new_data = tmp_map.data.astype(np.float64)
+        new_data /= tmp_map.meta['EXPTIME']
+        tmp_map = Map(new_data, tmp_map.meta)
+        tmp_map = tmp_map.resample([256, 256] * u.pix)
+
+        tmp_map = Map(idl['IMG'][i], tmp_map.meta)
+
+        maps.append(tmp_map)
+        if not nocrop:
+            maps[i] = maps[i].submap(blc, top_right=trc)
+    return maps
 
 # Given a set up AIA SunPy Maps, return the appropriate arguments for use
 # as an EMToolKit data sequence -- the selection of maps appropriate for
