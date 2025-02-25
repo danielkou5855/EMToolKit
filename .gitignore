@@ -1,6 +1,6 @@
 __pycache__/
 *.pyc
-*.png
+# *.png
 EMToolKit/visualization/dashboard_gpt.py
 EMToolKit.egg-info
 # .data
