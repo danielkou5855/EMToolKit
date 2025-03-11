@@ -127,7 +127,7 @@ def sparse_em_solve(image, errors, exptimes, Dict, zfac=[],
                     m1_array[i][j][k] = m1
                     m2_array[i][j][k] = m2
                     m3_array[i][j][k] = m3
-                    eps_array[i][j][k] = eps*np.max(y)*epsfac
+                    eps_array[i][j][k] = eps*np.max(y)
                     r_array[i][j][k] = r
                     s_array[i][j][k] = s
                 else:
