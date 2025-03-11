@@ -71,62 +71,6 @@ def simplex(zequation, constraint, m1, m2, m3, eps=None):
 
     result = linprog(-zequation, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, options={'tol':eps,'autoscale':True}, method='simplex')
 
-    if len(zequations) < 64 * 64:
-        zequations.append(zequation)
-        constraints.append(constraint)
-        m1s.append(m1)
-        m2s.append(m2)
-        m3s.append(m3)
-        epss.append(eps)
-        results.append(np.hstack([result['fun'],result['x']]))
-        statuses.append(result['status'])
-
-        if len(zequations) == 64 * 64:
-            # load the sparse_em_solve_called.npz file
-            loaded = np.load('sparse_em_solve_called.npz')
-            zequations_loaded = loaded['zequations']
-            constraints_loaded = loaded['constraints']
-            m1s_loaded = loaded['m1s']
-            m2s_loaded = loaded['m2s']
-            m3s_loaded = loaded['m3s']
-            epss_loaded = loaded['epss']
-
-            # check if the statuses match
-            if (not np.allclose(zequations, zequations_loaded, atol=1e-16) or
-                not np.allclose(constraints, constraints_loaded, atol=1e-16) or
-                not np.allclose(m1s, m1s_loaded, atol=1e-16) or
-                not np.allclose(m2s, m2s_loaded, atol=1e-16) or
-                not np.allclose(m3s, m3s_loaded, atol=1e-16) or
-                not np.allclose(epss, epss_loaded, atol=1e-16)):
-                print('input mismatch')
-                exit(1)
-            else:
-                print('input arrays match')
-
-            # print all data types
-            print('zequations:', zequations[0].dtype)
-            print('constraints:', constraints[0].dtype)
-            print('m1s:', type(m1s[0]))
-            print('m2s:', type(m2s[0]))
-            print('m3s:', type(m3s[0]))
-            print('epss:', type(epss[0]))
-            print('results:', results[0].dtype)
-            print('statuses:', type(statuses[0]))
-
-            # save all variables to a npz file
-            print('saved')
-            np.savez(
-                'sparse_em_solve_called.npz', 
-                zequations=np.array(zequations),
-                constraints=np.array(constraints),
-                m1s=np.array(m1s), 
-                m2s=np.array(m2s), 
-                m3s=np.array(m3s), 
-                epss=np.array(epss),
-                results=np.array(results),
-                statuses=np.array(statuses)
-            )
-
     return np.hstack([result['fun'],result['x']]), result['status']
 
 
@@ -158,6 +102,16 @@ def sparse_em_solve(image, errors, exptimes, Dict, zfac=[],
     constraint[m1:m1+m2,1:ntemp+1] = -Dict
     coeffs = np.zeros([image.shape[0],image.shape[1],ntemp])
     tols = np.zeros([image.shape[0],image.shape[1]])
+
+    zequations_array = [[[0] * ntol] * dim[1]] * dim[0]
+    constraints_array = [[[0] * ntol] * dim[1]] * dim[0]
+    m1_array = [[[0] * ntol] * dim[1]] * dim[0]
+    m2_array = [[[0] * ntol] * dim[1]] * dim[0]
+    m3_array = [[[0] * ntol] * dim[1]] * dim[0]
+    eps_array = [[[0] * ntol] * dim[1]] * dim[0]
+    r_array = [[[0] * ntol] * dim[1]] * dim[0]
+    s_array = [[[0] * ntol] * dim[1]] * dim[0]
+
     for i in range(0,dim[0]):
         for j in range(0,dim[1]):
             y = np.clip(image[i,j,:],0,None)/exptimes
@@ -167,6 +121,15 @@ def sparse_em_solve(image, errors, exptimes, Dict, zfac=[],
                     constraint[0:m1,0] = y+tol
                     constraint[m1:m1+m2,0] = np.clip((y-symmbuff*tol), 0.0, None)
                     [r, s] = simplex(zequation, constraint.T, m1, m2, m3, eps=eps*np.max(y)*epsfac)
+
+                    zequations_array[i][j][k] = zequation
+                    constraints_array[i][j][k] = constraint.T
+                    m1_array[i][j][k] = m1
+                    m2_array[i][j][k] = m2
+                    m3_array[i][j][k] = m3
+                    eps_array[i][j][k] = eps*np.max(y)*epsfac
+                    r_array[i][j][k] = r
+                    s_array[i][j][k] = s
                 else:
                     constraint = np.hstack([y,-Dict])
                     [r, s] = simplex(zequation, constraint.T, 0, 0, nchannels)
@@ -181,5 +144,20 @@ def sparse_em_solve(image, errors, exptimes, Dict, zfac=[],
             tols[i,j] = k
     if(len(nocounts[0]) > 0):
         status[nocounts] = 11.0
+
+    data = {
+        'zequations_array': zequations_array,
+        'constraints_array': constraints_array, 
+        'm1_array': m1_array,
+        'm2_array': m2_array,
+        'm3_array': m3_array,
+        'eps_array': eps_array,
+        'r_array': r_array,
+        's_array': s_array
+    }
+
+    import pickle
+    with open('simplex_inputs_and_outputs.pkl', 'wb') as f:
+        pickle.dump(data, f)
 
     return coeffs, zmax, status

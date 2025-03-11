@@ -29,7 +29,9 @@ def sparse_em_wrapper(datasequence, wrapargs=None):
 		exptimes[i] = datasequence[i].meta['exptime']
 
 	[Dict, lgtaxis, basis_funcs, bases_sigmas] = sparse_em_init(trlogts, tresps, differential=True)
+	t1 = time.time() * 1000
 	coeffs, zmax, status = sparse_em_solve(datacube, errscube, exptimes, Dict)
+	print(time.time() * 1000 - t1)
 	coeffs = coeffs.transpose(np.roll(np.arange(coeffs.ndim),1))
 
 	[nchannels,nb] = Dict.shape
