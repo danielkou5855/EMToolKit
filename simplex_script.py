@@ -3,6 +3,17 @@ from scipy.optimize import linprog
 
 import pickle
 
+files = ['/sanhome/danielkou/public_html/output/simplex_1.4tolfac_8e-4eps_better.pkl',
+         '/sanhome/danielkou/public_html/output/simplex_2.5tolfac_8e-4eps_better.pkl']
+
+for file in files:
+    with open(file, 'rb') as f:
+        d = pickle.load(f)
+
+        print(np.max(d['rs_array']), np.min(d['rs_array']))
+
+breakpoint()
+
 with open('simplex_inputs_and_outputs.pkl', 'rb') as f:
     called = pickle.load(f)
 

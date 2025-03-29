@@ -75,7 +75,7 @@ def simplex(zequation, constraint, m1, m2, m3, eps=None):
 
 
 def sparse_em_solve(image, errors, exptimes, Dict, zfac=[],
-            eps=1.0e-3, tolfac=1.4, relax=True, symmbuff=1.0, adaptive_tolfac=True, epsfac=1.0e-10):#8e-4):
+            eps=1.0e-3, tolfac=1.4, relax=True, symmbuff=1.0, adaptive_tolfac=True, epsfac=8e-4):#8e-4):
     dim = image.shape
     nocounts = np.where(np.sum(image,axis=2) < 10*eps)
 
@@ -88,6 +88,7 @@ def sparse_em_solve(image, errors, exptimes, Dict, zfac=[],
     else:
         zequation = np.zeros(ntemp) - 1.0
 
+    tolfac2 = tolfac
     if(adaptive_tolfac and np.isscalar(tolfac)): tolfac = tolfac*np.array([1.0,1.5,2.25])
     if(np.isscalar(tolfac)): tolfac = [tolfac]
     ntol = len(tolfac)
@@ -157,7 +158,7 @@ def sparse_em_solve(image, errors, exptimes, Dict, zfac=[],
     }
 
     import pickle
-    with open('simplex_inputs_and_outputs.pkl', 'wb') as f:
+    with open(f'simplex_inputs_and_outputs_tolfac{tolfac2}_eps{epsfac}.pkl', 'wb') as f:
         pickle.dump(data, f)
 
     return coeffs, zmax, status
