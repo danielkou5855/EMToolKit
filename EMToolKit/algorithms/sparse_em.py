@@ -61,6 +61,73 @@ epss = []
 results = []
 statuses = []
 
+from scipy.sparse import csc_matrix
+import highspy
+
+def solveLP(c, Aineq, bineq):
+    """Solve a linear program of the form
+        argmin c^T x s.t. x >= 0, Aineq@x <= bineq
+    skipping a lot of scipy cruft"""
+    # make a sparse matrix of the inequality matrix
+    # in the BPDEM case, this is shared, so if you want
+    # another speed-up, you can probably pull this part out
+    Aineq = csc_matrix(Aineq)
+
+    # Create the highs environment. Hoisting this outside the function 
+    # (i.e., so it's created once) doesn't speed things up much
+    highs = highspy._Highs()
+    # turn off loggging info
+    highs.setOptionValue("log_to_console", False)
+    highs_options = highspy.HighsOptions()
+    setattr(highs_options, 'log_to_console', False)
+
+    # Create a lp object. This object can't be reused, as far as I can 
+    # tell. The nomenclature here is a bit funny
+    lp = highspy.HighsLp()
+    # set up the sizes
+    numcol, numrow = c.size, bineq.size
+    lp.num_col_ = numcol
+    lp.num_row_ = numrow
+    lp.a_matrix_.num_col_ = numcol
+    lp.a_matrix_.num_row_ = numrow
+
+    # setup the format
+    lp.a_matrix_.format_ = highspy.MatrixFormat.kColwise
+
+    # objective goes here
+    lp.col_cost_ = c
+    
+    # bounds on the variables; col is [0,inf]
+    lp.col_lower_ = np.zeros_like(c)
+    lp.col_upper_ = np.ones_like(c) * np.inf
+    
+    # We have Aineq @ x <= bineq but no other constraints 
+    # There are no lower bounds on Aineq @ x (since we've
+    # put them in by having two rows
+    lp.row_lower_ = - np.ones_like(c) * np.inf 
+    lp.row_upper_ = bineq
+
+    # put the inequality matrix in
+    lp.a_matrix_.start_ = Aineq.indptr
+    lp.a_matrix_.index_ = Aineq.indices
+    lp.a_matrix_.value_ = Aineq.data
+
+    # pass the options and run
+    highs.passOptions(highs_options)
+    highs.passModel(lp)
+    run_status = highs.run()
+
+    status = highs.getModelStatus()
+    res = {'x': None, 'fun': None, 'status': None}
+
+    # if we succeed, update the returns
+    if status == highspy.HighsModelStatus.kOptimal:
+        res['x'] = np.array(highs.getSolution().col_value)
+        res['fun'] = np.sum(res['x'])
+        res['status'] = 0
+
+    return res
+
 def simplex(zequation, constraint, m1, m2, m3, eps=None):
     from scipy.optimize import linprog
 
@@ -69,13 +136,20 @@ def simplex(zequation, constraint, m1, m2, m3, eps=None):
     b_eq = constraint[0,m1+m2:m1+m2+m3]
     A_eq = constraint[1:,m1+m2:m1+m2+m3].T
 
-    result = linprog(-zequation, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, options={'tol':eps,'autoscale':True}, method='simplex')
+    result2 = linprog(-zequation, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, options={'tol':eps,'autoscale':True}, method='simplex')
+    result = solveLP(-zequation, A_ub, b_ub)
+
+    with open('res.txt', 'a') as f:
+        f.write(str(result2))
+
+    with open('res2.txt', 'a') as f:
+        f.write(str(result))
 
     return np.hstack([result['fun'],result['x']]), result['status']
 
 
 def sparse_em_solve(image, errors, exptimes, Dict, zfac=[],
-            eps=1.0e-3, tolfac=1.4, relax=True, symmbuff=1.0, adaptive_tolfac=True, epsfac=8e-4):#8e-4):
+            eps=1.0e-3, tolfac=2.5, relax=True, symmbuff=1.0, adaptive_tolfac=True, epsfac=1e-10):#8e-4):
     dim = image.shape
     nocounts = np.where(np.sum(image,axis=2) < 10*eps)
 
@@ -135,7 +209,7 @@ def sparse_em_solve(image, errors, exptimes, Dict, zfac=[],
                     constraint = np.hstack([y,-Dict])
                     [r, s] = simplex(zequation, constraint.T, 0, 0, nchannels)
                 if(s==0): break
-            if(np.min(r[1:ntemp+1]) < 0.0):
+            if r[0] == None or (np.min(r[1:ntemp+1]) < 0.0):
                 coeffs[i,j,0:ntemp] = 0.0
                 s = 10
             else:

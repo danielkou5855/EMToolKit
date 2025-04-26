@@ -13,3 +13,4 @@ scipy
 xrtpy
 h5netcdf
 sunkit-instruments
+highspy
